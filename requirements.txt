@@ -1,0 +1,5 @@
+streamlit==1.26.0
+geopandas==0.13.0
+folium==0.14.0
+streamlit-folium==0.13.0
+mapclassify==2.5.0
