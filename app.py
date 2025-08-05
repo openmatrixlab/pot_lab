@@ -23,49 +23,83 @@ def set_background_cached(image_path):
 @st.cache_data
 def load_shapefile(zip_content):
     with tempfile.TemporaryDirectory() as tmp:
-        # Guardar el ZIP en un archivo temporal
+        # Guardar el ZIP en archivo temporal
         zip_path = os.path.join(tmp, "data.zip")
         with open(zip_path, "wb") as f:
             f.write(zip_content)
 
-        # Extraer los archivos
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(tmp)
+        # Diagnóstico inicial
+        st.write(f"Tamaño del archivo ZIP: {len(zip_content) / 1024:.2f} KB")
 
-        # Buscar el archivo .shp de manera más explícita
-        shp_files = []
-        for root, _, files in os.walk(tmp):
-            if "__MACOSX" not in root:  # Ignorar archivos Mac
+        try:
+            # Verificar si es un ZIP válido
+            if not zipfile.is_zipfile(zip_path):
+                return st.error("El archivo subido no es un ZIP válido")
+
+            # Extraer archivos
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                file_list = zf.namelist()
+                st.write(f"Archivos en ZIP: {len(file_list)}")
+
+                # Mostrar los primeros 10 archivos para diagnóstico
+                for i, file in enumerate(file_list[:10]):
+                    st.write(f"- {file}")
+
+                # Extraer todos los archivos
+                zf.extractall(tmp)
+
+            # Buscar archivos .shp
+            shp_files = []
+            for root, _, files in os.walk(tmp):
                 for file in files:
                     if file.lower().endswith(".shp"):
                         shp_files.append(os.path.join(root, file))
 
-        if not shp_files:
-            raise ValueError("No se encontró ningún archivo .shp válido")
+            if not shp_files:
+                return st.error("No se encontró ningún archivo .shp en el ZIP")
 
-        # Usar el primer .shp encontrado
-        shp_path = shp_files[0]
+            st.write(f"Archivos .shp encontrados: {len(shp_files)}")
+            st.write(f"Ruta: {shp_files[0]}")
 
-        try:
-            # Asegurarse de que todos los archivos asociados estén presentes
+            # Verificar archivos complementarios
+            shp_path = shp_files[0]
             base_name = os.path.splitext(shp_path)[0]
+            missing_files = []
             for ext in ['.shx', '.dbf', '.prj']:
                 if not os.path.exists(f"{base_name}{ext}"):
-                    st.warning(f"Archivo auxiliar {ext} no encontrado")
+                    missing_files.append(ext)
 
-            # Leer el shapefile
-            gdf = gpd.read_file(shp_path)
+            if missing_files:
+                st.warning(f"Faltan archivos complementarios: {', '.join(missing_files)}")
 
-            # Validar y transformar CRS
+            # Intentar abrir con método alternativo
+            try:
+                st.write("Intentando leer con método estándar...")
+                gdf = gpd.read_file(shp_path)
+            except Exception as e1:
+                st.write(f"Error en método estándar: {str(e1)}")
+                try:
+                    st.write("Intentando método alternativo con fiona...")
+                    import fiona
+                    with fiona.open(shp_path) as src:
+                        gdf = gpd.GeoDataFrame.from_features(src, crs=src.crs)
+                except Exception as e2:
+                    st.error(f"Ambos métodos fallaron. Error: {str(e2)}")
+                    raise ValueError("No se pudo cargar el shapefile")
+
+            # Validar CRS
             if gdf.crs is None:
+                st.warning("CRS no definido, estableciendo EPSG:4326")
                 gdf.set_crs(epsg=4326, inplace=True)
             elif gdf.crs.to_epsg() != 4326:
+                st.write(f"Transformando CRS desde {gdf.crs} a EPSG:4326")
                 gdf = gdf.to_crs(epsg=4326)
 
             return gdf
 
         except Exception as e:
-            raise ValueError(f"Error al cargar shapefile: {str(e)}")
+            st.error(f"Error general: {str(e)}")
+            raise ValueError(f"Error al procesar el shapefile")
 
 
 def create_folium_map(_gdf, field, method="Natural Breaks"):
