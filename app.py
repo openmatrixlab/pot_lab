@@ -28,24 +28,9 @@ def load_shapefile(zip_content):
         with open(zip_path, "wb") as f:
             f.write(zip_content)
 
-        # Diagnóstico inicial
-        st.write(f"Tamaño del archivo ZIP: {len(zip_content) / 1024:.2f} KB")
-
         try:
-            # Verificar si es un ZIP válido
-            if not zipfile.is_zipfile(zip_path):
-                return st.error("El archivo subido no es un ZIP válido")
-
             # Extraer archivos
             with zipfile.ZipFile(zip_path, "r") as zf:
-                file_list = zf.namelist()
-                st.write(f"Archivos en ZIP: {len(file_list)}")
-
-                # Mostrar los primeros 10 archivos para diagnóstico
-                for i, file in enumerate(file_list[:10]):
-                    st.write(f"- {file}")
-
-                # Extraer todos los archivos
                 zf.extractall(tmp)
 
             # Buscar archivos .shp
@@ -58,48 +43,32 @@ def load_shapefile(zip_content):
             if not shp_files:
                 return st.error("No se encontró ningún archivo .shp en el ZIP")
 
-            st.write(f"Archivos .shp encontrados: {len(shp_files)}")
-            st.write(f"Ruta: {shp_files[0]}")
-
-            # Verificar archivos complementarios
+            # Usar MemoryFile de fiona para evitar problemas de path
+            import fiona
             shp_path = shp_files[0]
-            base_name = os.path.splitext(shp_path)[0]
-            missing_files = []
-            for ext in ['.shx', '.dbf', '.prj']:
-                if not os.path.exists(f"{base_name}{ext}"):
-                    missing_files.append(ext)
 
-            if missing_files:
-                st.warning(f"Faltan archivos complementarios: {', '.join(missing_files)}")
+            # Leer archivo en memoria y cargarlo directamente
+            with open(shp_path, "rb") as f:
+                shp_bytes = f.read()
 
-            # Intentar abrir con método alternativo
-            try:
-                st.write("Intentando leer con método estándar...")
-                gdf = gpd.read_file(shp_path)
-            except Exception as e1:
-                st.write(f"Error en método estándar: {str(e1)}")
-                try:
-                    st.write("Intentando método alternativo con fiona...")
-                    import fiona
-                    with fiona.open(shp_path) as src:
-                        gdf = gpd.GeoDataFrame.from_features(src, crs=src.crs)
-                except Exception as e2:
-                    st.error(f"Ambos métodos fallaron. Error: {str(e2)}")
-                    raise ValueError("No se pudo cargar el shapefile")
+            with fiona.io.MemoryFile(shp_bytes) as memfile:
+                with memfile.open() as collection:
+                    gdf = gpd.GeoDataFrame.from_features(
+                        collection,
+                        crs=collection.crs
+                    )
 
             # Validar CRS
             if gdf.crs is None:
-                st.warning("CRS no definido, estableciendo EPSG:4326")
                 gdf.set_crs(epsg=4326, inplace=True)
             elif gdf.crs.to_epsg() != 4326:
-                st.write(f"Transformando CRS desde {gdf.crs} a EPSG:4326")
                 gdf = gdf.to_crs(epsg=4326)
 
             return gdf
 
         except Exception as e:
-            st.error(f"Error general: {str(e)}")
-            raise ValueError(f"Error al procesar el shapefile")
+            st.error(f"Error al procesar el shapefile: {str(e)}")
+            raise ValueError("No se pudo cargar el shapefile")
 
 
 def create_folium_map(_gdf, field, method="Natural Breaks"):
