@@ -23,36 +23,49 @@ def set_background_cached(image_path):
 @st.cache_data
 def load_shapefile(zip_content):
     with tempfile.TemporaryDirectory() as tmp:
-        zf_path = os.path.join(tmp, "uploaded.zip")
-        with open(zf_path, "wb") as f:
+        # Guardar el ZIP en un archivo temporal
+        zip_path = os.path.join(tmp, "data.zip")
+        with open(zip_path, "wb") as f:
             f.write(zip_content)
-        with zipfile.ZipFile(zf_path, "r") as zf:
+
+        # Extraer los archivos
+        with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(tmp)
 
-        # Buscar el archivo .shp válido
-        shp_path = next(
-            (
-                os.path.join(root, file)
-                for root, _, files in os.walk(tmp)
-                for file in files
-                if file.endswith(".shp") and "__MACOSX" not in root
-            ),
-            None
-        )
+        # Buscar el archivo .shp de manera más explícita
+        shp_files = []
+        for root, _, files in os.walk(tmp):
+            if "__MACOSX" not in root:  # Ignorar archivos Mac
+                for file in files:
+                    if file.lower().endswith(".shp"):
+                        shp_files.append(os.path.join(root, file))
 
-        if not shp_path:
-            raise ValueError("No se encontró ningún archivo .shp válido en el .zip")
+        if not shp_files:
+            raise ValueError("No se encontró ningún archivo .shp válido")
 
-        # Cargar shapefile con geopandas
-        gdf = gpd.read_file(shp_path)
+        # Usar el primer .shp encontrado
+        shp_path = shp_files[0]
 
-        # Validar y transformar CRS si es necesario
-        if gdf.crs is None:
-            gdf.set_crs(epsg=4326, inplace=True)
-        elif gdf.crs.to_epsg() != 4326:
-            gdf = gdf.to_crs(epsg=4326)
+        try:
+            # Asegurarse de que todos los archivos asociados estén presentes
+            base_name = os.path.splitext(shp_path)[0]
+            for ext in ['.shx', '.dbf', '.prj']:
+                if not os.path.exists(f"{base_name}{ext}"):
+                    st.warning(f"Archivo auxiliar {ext} no encontrado")
 
-        return gdf
+            # Leer el shapefile
+            gdf = gpd.read_file(shp_path)
+
+            # Validar y transformar CRS
+            if gdf.crs is None:
+                gdf.set_crs(epsg=4326, inplace=True)
+            elif gdf.crs.to_epsg() != 4326:
+                gdf = gdf.to_crs(epsg=4326)
+
+            return gdf
+
+        except Exception as e:
+            raise ValueError(f"Error al cargar shapefile: {str(e)}")
 
 
 def create_folium_map(_gdf, field, method="Natural Breaks"):
