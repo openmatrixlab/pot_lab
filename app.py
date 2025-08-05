@@ -28,21 +28,31 @@ def load_shapefile(zip_content):
             f.write(zip_content)
         with zipfile.ZipFile(zf_path, "r") as zf:
             zf.extractall(tmp)
-        shp = next(
-            (os.path.join(r, fname)
-             for r, _, files in os.walk(tmp)
-             for fname in files
-             if fname.endswith(".shp") and "__MACOSX" not in r),
+
+        # Buscar el archivo .shp válido
+        shp_path = next(
+            (
+                os.path.join(root, file)
+                for root, _, files in os.walk(tmp)
+                for file in files
+                if file.endswith(".shp") and "__MACOSX" not in root
+            ),
             None
         )
-        if shp:
-            gdf = gpd.read_file(shp)
-            if gdf.crs is None:
-                gdf.set_crs(epsg=4326, inplace=True)
-            elif gdf.crs.to_epsg() != 4326:
-                gdf = gdf.to_crs(epsg=4326)
-            return gdf
-    return None
+
+        if not shp_path:
+            raise ValueError("No se encontró ningún archivo .shp válido en el .zip")
+
+        # Cargar shapefile con geopandas
+        gdf = gpd.read_file(shp_path)
+
+        # Validar y transformar CRS si es necesario
+        if gdf.crs is None:
+            gdf.set_crs(epsg=4326, inplace=True)
+        elif gdf.crs.to_epsg() != 4326:
+            gdf = gdf.to_crs(epsg=4326)
+
+        return gdf
 
 
 def create_folium_map(_gdf, field, method="Natural Breaks"):
