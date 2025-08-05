@@ -20,6 +20,7 @@ def set_background_cached(image_path):
         return None
 
 
+@st.cache_data
 def load_shapefile(zip_content):
     with tempfile.TemporaryDirectory() as tmp:
         zf_path = os.path.join(tmp, "uploaded.zip")
