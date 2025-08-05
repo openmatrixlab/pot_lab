@@ -73,7 +73,7 @@ def create_folium_map(_gdf, field, method="Natural Breaks"):
 
         m = folium.Map(
             location=[cent.y, cent.x],
-            zoom_start=12.2,
+            zoom_start=12,
             zoomSnap=0.1,
             zoomDelta=0.1,
             tiles="CartoDB positron",
@@ -158,12 +158,19 @@ def apply_background():
             .st-emotion-cache-1v0mbdj {{
                 width: 100% !important;
             }}
-            /* Hacemos el contenedor derecho más vertical */
             .st-emotion-cache-1wrcr25 {{
                 flex-direction: column;
             }}
             .st-emotion-cache-1p1nwyz {{
                 min-height: 750px;
+            }}
+
+            /* 🔵 Texto de los títulos markdown en blanco */
+            h1, h2, h3, h4, h5, h6 {{
+                color: white !important;
+            }}
+            .stMarkdown p {{
+                color: white !important;
             }}
             </style>
         """, unsafe_allow_html=True)
@@ -191,7 +198,7 @@ init_state()
 
 st.markdown("""
     <h1 style='font-size:64x; text-align: left;
-               font-weight:800; color: #2E86AB;
+               font-weight:800; color: white;
                font-family: "Arial Black", sans-serif;'>
       POT Lab
     </h1>
@@ -294,7 +301,6 @@ if st.session_state.loaded:
                     height=750,
                     returned_objects=[],
                     key="folium_map",
-                    zoom=13
                 )
 
 # Mensaje final
